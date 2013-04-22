@@ -1,51 +1,65 @@
-#!/usr/bin/python3
-#TODO: refactor
+#!/usr/bin/python
 
 import sys
-from os.path import expanduser
-import pickle
-from subprocess import check_output
-from os.path import exists
+import os
+import json
+import argparse
+import subprocess
 
-DUMP_FILE = "{0}/.mplayer_resume".format(expanduser("~"))
-file_name = sys.argv[1]
+DUMP_FILE = os.path.expandvars("$HOME/.cache/mplayer/resume-cache")
 mplayer = "/usr/bin/mplayer"
-epsilon = 2 # time to roll back
-flags = ['-fs', '-utf8']
-
-def get_old_settings():
-    if not exists(DUMP_FILE):
-        return dict()
-    with open(DUMP_FILE, 'rb') as f:
-        data = pickle.load(f)
-    return data
+flags = ['-fs']
 
 parse_mplayer_output = lambda x: x.split("A:")[-1].split("V:")[0].strip()
 
-#def parse_mplayer_output(mp_out):
-    #time_to_resume = mp_out.split("A:")[-1].split("V:")[0].strip()
-    ##if time_to_resume.isdigit():
-        ##time_to_resume = '0'
-    #return time_to_resume
+def maybe_mkdir(path):
+    if not os.path.exists(path):
+        return os.makedirs(path)
 
-def dump_settings(new_settings, old_settings):
-    old_settings.update(new_settings)
-    with open(DUMP_FILE, 'wb') as f:
-        pickle.dump(old_settings, f, pickle.HIGHEST_PROTOCOL)
+def _get_cache():
+    if not os.path.exists(DUMP_FILE):
+        return {}
+    with open(DUMP_FILE) as fp:
+        return json.load(fp)
 
-# get old resume time from file
-time_to_resume = get_old_settings().get(file_name, '0')
-# roll it back
-time_to_resume = str(float(time_to_resume) - epsilon)
+def _save_cache(data):
+    with open(DUMP_FILE, 'w') as fp:
+        return json.dump(data, fp)
 
-# compose mplayer commad
-cmd = [mplayer, '-ss', time_to_resume, file_name] + flags
-# wait until it finish
-mplayer_output = str(check_output(cmd))
+def save_position(file_name, position):
+    cache = _get_cache()
+    cache[file_name] = float(position)
+    _save_cache(cache)
 
-# get new resume time
-time_to_resume = parse_mplayer_output(mplayer_output)
-settings_to_pickle = {file_name: time_to_resume}
+def get_position(file_name):
+    cache = _get_cache()
+    if cache.get(file_name):
+        return cache[file_name]
 
-# write resume time to file
-dump_settings(settings_to_pickle, get_old_settings())
+def parse_args():
+    parser = argparse.ArgumentParser(description='mplayer-resume')
+    parser.add_argument('file', nargs=1, type=str, metavar='fn',
+                                help='file to play')
+    parser.add_argument('-r', '--resume', nargs=1, type=int, metavar='int', default=2,
+                                help='time to roll back')
+    return (vars(parser.parse_args()), parser)
+
+def main():
+    args, parser = parse_args()
+    file_name = args['file'][0]
+    resume = args['resume']
+
+    maybe_mkdir(os.path.dirname(DUMP_FILE))
+
+    resume_time = get_position(file_name) or 0
+    if resume_time:
+        resume_time = float(resume_time - resume)
+
+    cmd = [mplayer, '-ss', str(resume_time), file_name] + flags
+    mplayer_output = str(subprocess.check_output(cmd, stderr=subprocess.STDOUT))
+
+    save_position(file_name, parse_mplayer_output(mplayer_output))
+
+
+if __name__ == '__main__':
+    main()
