@@ -26,6 +26,11 @@ def _save_cache(data):
     with open(DUMP_FILE, 'w') as fp:
         return json.dump(data, fp)
 
+def reset_position(file_name):
+    cache = _get_cache()
+    cache.pop(file_name, None)
+    _save_cache(cache)
+
 def save_position(file_name, position):
     cache = _get_cache()
     cache[file_name] = float(position)
@@ -56,9 +61,13 @@ def main():
         resume_time = float(resume_time - resume)
 
     cmd = [mplayer, '-ss', str(resume_time), file_name] + flags
-    mplayer_output = str(subprocess.check_output(cmd, stderr=subprocess.STDOUT))
+    mplayer_output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)\
+                               .decode(sys.stdout.encoding)
 
-    save_position(file_name, parse_mplayer_output(mplayer_output))
+    if mplayer_output.endswith("Exiting... (End of file)\n"):
+        reset_position(file_name)
+    else:
+        save_position(file_name, parse_mplayer_output(mplayer_output))
 
 
 if __name__ == '__main__':
