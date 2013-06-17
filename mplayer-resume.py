@@ -24,7 +24,7 @@ def _get_cache():
 
 def _save_cache(data):
     with open(DUMP_FILE, 'w') as fp:
-        return json.dump(data, fp)
+        return json.dump(data, fp, indent=2, separators=(',', ': '))
 
 def reset_position(file_name):
     cache = _get_cache()
