@@ -37,18 +37,20 @@ def get_position(file_name):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='mplayer-resume')
-    parser.add_argument('file', nargs=1, type=str, metavar='fn', help='file to play')
+    parser.add_argument('file', nargs=1, type=str, metavar='filename', help='file to play')
     parser.add_argument('-r', '--resume', nargs=1, type=int, metavar='int', default=2,
             help='time difference in seconds, negative number means a rollback')
     parser.add_argument('flags', nargs=argparse.REMAINDER, default=None,
-            help='mplayer arguments')
+            metavar='margs', help='mplayer arguments')
 
     return (vars(parser.parse_args()), parser)
 
 def main():
     args, parser = parse_args()
     file_name = args['file'][0]
-    resume = args['resume'][0]
+    resume = args['resume']
+    if type(resume) == list:
+        resume = resume[0]
 
     maybe_mkdir(os.path.dirname(DUMP_FILE))
 
@@ -56,13 +58,21 @@ def main():
     if resume_time:
         resume_time = float(resume_time + resume)
 
-    cmd = [mplayer, '-ss', str(resume_time), file_name] + args['flags']
-    try:
-        mplayer_output = str(subprocess.check_output(cmd, stderr=subprocess.STDOUT))
-    except subprocess.CalledProcessError as e:
-        print(str(e))
+    cmd = ' '.join([mplayer, '-ss', str(resume_time), file_name] + args['flags'])
+    child = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE)
+    mplayer_output = str()
+    while True:
+        out = child.stderr.read(1).decode()
+        if out == '' and child.poll() != None:
+            break
+        if out != '':
+            sys.stdout.write(out)
+            sys.stdout.flush()
+            mplayer_output += out
 
-    save_position(file_name, parse_mplayer_output(mplayer_output))
+    pos = parse_mplayer_output(mplayer_output)
+    if type(pos) == float:
+        save_position(file_name, pos)
 
 if __name__ == '__main__':
     main()
