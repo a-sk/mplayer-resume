@@ -70,9 +70,11 @@ def main():
             sys.stdout.flush()
             mplayer_output += out
 
-    pos = parse_mplayer_output(mplayer_output)
-    if type(pos) == float:
-        save_position(file_name, pos)
+    try:
+        pos = float(parse_mplayer_output(mplayer_output))
+    except:
+        sys.exit()
+    save_position(file_name, pos)
 
 if __name__ == '__main__':
     main()
