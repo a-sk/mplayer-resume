@@ -1,4 +1,7 @@
-Resume the previous playing state of mplayer.
+#mplayer-resume.py
+
+Watch the video you want with this script and it will remember its playback
+position for next time.
 	
 	usage: mplayer-resume.py [-h] [-r int] fn ...
 	
