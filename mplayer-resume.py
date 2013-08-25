@@ -8,7 +8,6 @@ import subprocess
 
 DUMP_FILE = os.path.expandvars("$HOME/.cache/mplayer/resume-cache")
 mplayer = "/usr/bin/mplayer"
-flags = ['-fs']
 
 parse_mplayer_output = lambda x: x.split("A:")[-1].split("V:")[0].strip()
 
@@ -38,28 +37,34 @@ def get_position(file_name):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='mplayer-resume')
-    parser.add_argument('file', nargs=1, type=str, metavar='fn',
-                                help='file to play')
+    parser.add_argument('file', nargs=1, type=str, metavar='fn', help='file to play')
     parser.add_argument('-r', '--resume', nargs=1, type=int, metavar='int', default=2,
-                                help='time to roll back')
+            help='time difference in seconds, negative number means a rollback')
+    parser.add_argument('flags', nargs=argparse.REMAINDER, default=None,
+            help='mplayer arguments')
+
     return (vars(parser.parse_args()), parser)
 
 def main():
     args, parser = parse_args()
     file_name = args['file'][0]
-    resume = args['resume']
+    resume = args['resume'][0]
 
     maybe_mkdir(os.path.dirname(DUMP_FILE))
 
     resume_time = get_position(file_name) or 0
     if resume_time:
-        resume_time = float(resume_time - resume)
+        resume_time = float(resume_time + resume)
 
-    cmd = [mplayer, '-ss', str(resume_time), file_name] + flags
-    mplayer_output = str(subprocess.check_output(cmd, stderr=subprocess.STDOUT))
+    cmd = [mplayer, '-ss', str(resume_time), file_name] + args['flags']
+    try:
+        mplayer_output = str(subprocess.check_output(cmd, stderr=subprocess.STDOUT))
+    except subprocess.CalledProcessError as e:
+        print(str(e))
 
     save_position(file_name, parse_mplayer_output(mplayer_output))
 
-
 if __name__ == '__main__':
     main()
+
+# vim: expandtab
