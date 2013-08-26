@@ -85,17 +85,20 @@ def main():
         if stdout.startswith('A:'):
             lastpos = stdout
 
+        if stderr.startswith('A:'):
+            lastpos = stderr
+
         if stderr.startswith('Playing '):
-            file_name = stderr[8:-2]
+            file_name = os.path.abspath(stderr[8:-2])
 
             resume_time = get_position(file_name) or 0
-            resume_time = float(resume_time + resume)
+            resume_time = resume_time + resume
 
             with open(fifo_file, 'w') as fifo:
                 fifo.write('seek %d\n' % resume_time)
 
     if file_name:
-        pos = float(parse_mplayer_output(lastpos))
+        pos = parse_mplayer_output(lastpos)
         save_position(file_name, pos)
 
 if __name__ == '__main__':
