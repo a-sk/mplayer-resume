@@ -5,6 +5,7 @@ import os
 import json
 import argparse
 import subprocess
+import time
 
 DUMP_FILE = os.path.expandvars("$HOME/.cache/mplayer/resume-cache")
 mplayer = "/usr/bin/mplayer"
@@ -30,6 +31,9 @@ def save_position(file_name, position):
     cache[file_name] = float(position)
     _save_cache(cache)
 
+def reset_position(file_name):
+    pass
+
 def get_position(file_name):
     cache = _get_cache()
     if cache.get(file_name):
@@ -37,44 +41,61 @@ def get_position(file_name):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='mplayer-resume')
-    parser.add_argument('file', nargs=1, type=str, metavar='filename', help='file to play')
-    parser.add_argument('-r', '--resume', nargs=1, type=int, metavar='int', default=2,
+    parser.add_argument('-r', '--resume', nargs=1, type=int, metavar='int', default=-2,
             help='time difference in seconds, negative number means a rollback')
     parser.add_argument('flags', nargs=argparse.REMAINDER, default=None,
             metavar='margs', help='mplayer arguments')
 
     return (vars(parser.parse_args()), parser)
 
+def run_mplayer(args):
+    fifo_file = "/tmp/mplayer-%d" % (time.time())
+    os.mkfifo(fifo_file)
+    cmd = [mplayer, '-slave', '--input=file=%s' % (fifo_file)] + args
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    while True:
+        retcode = p.poll()
+        stdout = p.stdout.readline().decode(sys.stdout.encoding)
+        stderr = p.stdout.readline().decode(sys.stderr.encoding)
+        yield stdout, stderr, fifo_file
+        if retcode is not None:
+            os.remove(fifo_file)
+            break
+
 def main():
     args, parser = parse_args()
-    file_name = args['file'][0]
     resume = args['resume']
     if type(resume) == list:
         resume = resume[0]
+    mflags = args['flags']
+    file_name = None
 
-    maybe_mkdir(os.path.dirname(DUMP_FILE))
+    for stdout, stderr, fifo_file in run_mplayer(mflags):
+        sys.stdout.write(stdout)
+        sys.stdout.write(stderr)
+        if stdout.startswith('A:'):
+            lastpos = stdout
 
-    resume_time = get_position(file_name) or 0
-    if resume_time:
-        resume_time = float(resume_time + resume)
+        if stderr.startswith('Playing '):
+            file_name = stderr[8:-2]
 
-    cmd = ' '.join([mplayer, '-ss', str(resume_time), file_name] + args['flags'])
-    child = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE)
-    mplayer_output = str()
-    while True:
-        out = child.stderr.read(1).decode()
-        if out == '' and child.poll() != None:
-            break
-        if out != '':
-            sys.stdout.write(out)
-            sys.stdout.flush()
-            mplayer_output += out
+            resume_time = get_position(file_name) or 0
+            resume_time = float(resume_time + resume)
+            with open(fifo_file, 'w') as fifo:
+                fifo.write('seek %d\n' % resume_time)
 
-    try:
-        pos = float(parse_mplayer_output(mplayer_output))
-    except:
-        sys.exit()
-    save_position(file_name, pos)
+
+    if file_name:
+        if stdout == 'Exiting... (End of file)':
+            reset_position(file_name)
+            return
+
+        maybe_mkdir(os.path.dirname(DUMP_FILE))
+
+
+        pos = float(parse_mplayer_output(lastpos))
+        save_position(file_name, pos)
 
 if __name__ == '__main__':
     main()
