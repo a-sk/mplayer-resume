@@ -24,7 +24,7 @@ def _get_cache():
 
 def _save_cache(data):
     with open(DUMP_FILE, 'w') as fp:
-        return json.dump(data, fp)
+        return json.dump(data, fp, indent=2)
 
 def save_position(file_name, position):
     cache = _get_cache()
@@ -32,7 +32,9 @@ def save_position(file_name, position):
     _save_cache(cache)
 
 def reset_position(file_name):
-    pass
+    cache = _get_cache()
+    cache.pop(file_name)
+    _save_cache(cache)
 
 def get_position(file_name):
     cache = _get_cache()
@@ -66,14 +68,20 @@ def run_mplayer(args):
 def main():
     args, parser = parse_args()
     resume = args['resume']
-    if type(resume) == list:
-        resume = resume[0]
+    if type(resume) == list: resume = resume[0]
     mflags = args['flags']
     file_name = None
+
+    maybe_mkdir(os.path.dirname(DUMP_FILE))
 
     for stdout, stderr, fifo_file in run_mplayer(mflags):
         sys.stdout.write(stdout)
         sys.stdout.write(stderr)
+
+        if stderr.endswith("Exiting... (End of file)\n"):
+            reset_position(file_name)
+            return
+
         if stdout.startswith('A:'):
             lastpos = stdout
 
@@ -82,22 +90,14 @@ def main():
 
             resume_time = get_position(file_name) or 0
             resume_time = float(resume_time + resume)
+
             with open(fifo_file, 'w') as fifo:
                 fifo.write('seek %d\n' % resume_time)
 
-
     if file_name:
-        if stdout == 'Exiting... (End of file)':
-            reset_position(file_name)
-            return
-
-        maybe_mkdir(os.path.dirname(DUMP_FILE))
-
-
         pos = float(parse_mplayer_output(lastpos))
         save_position(file_name, pos)
 
 if __name__ == '__main__':
     main()
-
 # vim: expandtab
