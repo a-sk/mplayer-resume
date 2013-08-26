@@ -14,3 +14,5 @@ position for next time.
 	optional arguments:
 	  -h, --help            show this help message and exit
 	  -r int, --resume int  time difference in seconds, negative number means a rollback
+
+Note: the scripts options must proceed those of mplayer's so mplayer-resume filename -r -10 will fail since -r is passed to mplayer instead
